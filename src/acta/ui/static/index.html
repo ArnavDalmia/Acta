@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acta — Development Ledger</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <h1>Acta</h1>
+            <span class="subtitle">Development Ledger</span>
+        </div>
+        <div class="header-right">
+            <select id="project-select">
+                <option value="">Select project...</option>
+            </select>
+            <select id="timeframe-select">
+                <option value="session">Session</option>
+                <option value="today" selected>Today</option>
+                <option value="last_1h">Last hour</option>
+                <option value="last_30m">Last 30m</option>
+                <option value="week">This week</option>
+            </select>
+        </div>
+    </header>
+
+    <main>
+        <section id="summary-panel" class="panel">
+            <h2>Progress</h2>
+            <div id="summary-content" class="summary-grid">
+                <p class="muted">Select a project to view progress.</p>
+            </div>
+        </section>
+
+        <section class="filter-bar">
+            <span class="filter-label">Filter:</span>
+            <div id="type-filters"></div>
+        </section>
+
+        <section id="timeline" class="panel">
+            <h2>Timeline</h2>
+            <div id="entries-list">
+                <p class="muted">No entries yet.</p>
+            </div>
+        </section>
+
+        <section id="open-items-panel" class="panel">
+            <h2>Open Items</h2>
+            <div id="open-items-list">
+                <p class="muted">No open items.</p>
+            </div>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
