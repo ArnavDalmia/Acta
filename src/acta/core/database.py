@@ -421,6 +421,80 @@ class Database:
             ).fetchone()
         return (row["tin"], row["tout"]) if row else (0, 0)
 
+    def get_cost_by_model(
+        self, project_id: str, timeframe: str = "today"
+    ) -> list[dict]:
+        """Returns token usage grouped by model, descending by total tokens."""
+        conditions = ["project_id = ?"]
+        params: list = [project_id]
+        cutoff = self._timeframe_cutoff(timeframe)
+        if cutoff:
+            conditions.append("created_at >= ?")
+            params.append(cutoff)
+
+        where = " AND ".join(conditions)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""SELECT model,
+                           COALESCE(SUM(tokens_in), 0)  AS tokens_in,
+                           COALESCE(SUM(tokens_out), 0) AS tokens_out,
+                           COUNT(*) AS calls
+                    FROM costs WHERE {where}
+                    GROUP BY model
+                    ORDER BY (SUM(tokens_in) + SUM(tokens_out)) DESC""",
+                params,
+            ).fetchall()
+        return [
+            {
+                "model": r["model"],
+                "tokens_in": r["tokens_in"],
+                "tokens_out": r["tokens_out"],
+                "total_tokens": r["tokens_in"] + r["tokens_out"],
+                "calls": r["calls"],
+            }
+            for r in rows
+        ]
+
+    def get_cost_by_session(
+        self, project_id: str, timeframe: str = "today"
+    ) -> list[dict]:
+        """Returns token usage grouped by session, most recent first."""
+        conditions = ["c.project_id = ?"]
+        params: list = [project_id]
+        cutoff = self._timeframe_cutoff(timeframe)
+        if cutoff:
+            conditions.append("c.created_at >= ?")
+            params.append(cutoff)
+
+        where = " AND ".join(conditions)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""SELECT c.session_id,
+                           s.started_at,
+                           COALESCE(SUM(c.tokens_in), 0)  AS tokens_in,
+                           COALESCE(SUM(c.tokens_out), 0) AS tokens_out,
+                           COUNT(*) AS calls,
+                           GROUP_CONCAT(DISTINCT c.model) AS models
+                    FROM costs c
+                    LEFT JOIN sessions s ON s.id = c.session_id
+                    WHERE {where}
+                    GROUP BY c.session_id
+                    ORDER BY MAX(c.created_at) DESC""",
+                params,
+            ).fetchall()
+        return [
+            {
+                "session_id": r["session_id"],
+                "started_at": r["started_at"],
+                "tokens_in": r["tokens_in"],
+                "tokens_out": r["tokens_out"],
+                "total_tokens": r["tokens_in"] + r["tokens_out"],
+                "calls": r["calls"],
+                "models": r["models"] or "",
+            }
+            for r in rows
+        ]
+
     # ── Aggregation ───────────────────────────────────────────
 
     def summarize_progress(

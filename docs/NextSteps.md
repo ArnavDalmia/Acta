@@ -2,6 +2,64 @@
 
 ---
 
+## UI Phases (In Progress)
+
+### ✅ Phase 1 — UI Redesign (DONE)
+Replaced single-page layout with a proper app shell:
+- Left sidebar with project selector and tab nav
+- Three tabs: **Timeline**, **Token Usage**, **Open Items**
+- Stat pills in the top bar (entries, open items, decisions, tokens)
+- Entry model name displayed on each timeline card
+- Open items badge on sidebar nav item
+
+### ✅ Phase 2 — Token Usage Tab (DONE)
+- New `GET /api/costs` endpoint returning total, by-model, and by-session breakdowns
+- Two new database methods: `get_cost_by_model()`, `get_cost_by_session()`
+- Cost tab with overview stats, bar charts per model, per-session table
+- Token counts format as K/M for readability
+
+### Phase 3 — Cost Tracking Activation
+
+Token data is stored and displayed correctly, but nothing calls `acta_record_cost` automatically yet.
+
+**What to do:**
+
+- [ ] Update `.cursor/rules/acta.md` to instruct Cursor's agent to call `acta_record_cost` after each response with token counts and model name
+- [ ] Confirm the Cursor API exposes token counts to the agent context (may need to estimate from response length as a fallback)
+- [ ] Test that costs populate in the Token Usage tab after a few interactions
+
+### Phase 4 — PR Description Generator (UI)
+
+The flagship V2 feature. Reads session ledger entries and generates a structured PR description grounded in what actually happened.
+
+**Implementation plan:**
+
+- [ ] Add `POST /api/generate/pr` endpoint to `ui/server.py`
+  - Reads entries for a project/session
+  - Calls configured LLM (from `~/.acta/config.toml`)
+  - Returns a markdown PR description
+- [ ] Add a **Generate** tab to the sidebar (4th nav item)
+- [ ] UI: session selector dropdown, "Generate PR" button, copyable markdown output panel
+- [ ] Fallback: if no LLM configured, show a structured template pre-filled from ledger data (no API key needed)
+
+### Phase 5 — Ledger Chatbot (UI)
+
+Ask questions about your development history, grounded strictly in Acta entries.
+
+**Implementation plan:**
+
+- [ ] Add `POST /api/chat` endpoint to `ui/server.py`
+  - Accepts `{"question": "...", "project_id": "...", "timeframe": "today"}`
+  - Pulls relevant entries as context
+  - Calls LLM with context + question
+  - Returns answer with entry citations
+- [ ] Add a **Chat** tab to the sidebar (5th nav item)
+- [ ] UI: chat input, message thread view, entry citations shown per answer
+- [ ] Streaming responses (chunked transfer) for better UX on slow models
+- [ ] Works with any configured provider (OpenAI, Anthropic, DeepSeek, Ollama)
+
+---
+
 ## Immediate V1 Completions
 
 Things to close out before calling V1 done:

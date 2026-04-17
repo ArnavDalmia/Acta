@@ -7,53 +7,105 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <div class="header-left">
-            <h1>Acta</h1>
-            <span class="subtitle">Development Ledger</span>
-        </div>
-        <div class="header-right">
-            <select id="project-select">
-                <option value="">Select project...</option>
-            </select>
-            <select id="timeframe-select">
-                <option value="session">Session</option>
-                <option value="today" selected>Today</option>
-                <option value="last_1h">Last hour</option>
-                <option value="last_30m">Last 30m</option>
-                <option value="week">This week</option>
-            </select>
-        </div>
-    </header>
+<div class="app">
 
-    <main>
-        <section id="summary-panel" class="panel">
-            <h2>Progress</h2>
-            <div id="summary-content" class="summary-grid">
-                <p class="muted">Select a project to view progress.</p>
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-icon">⬡</span>
+            <div class="brand-text">
+                <span class="brand-name">Acta</span>
+                <span class="brand-sub">Dev Ledger</span>
             </div>
-        </section>
+        </div>
 
-        <section class="filter-bar">
-            <span class="filter-label">Filter:</span>
-            <div id="type-filters"></div>
-        </section>
+        <div class="sidebar-section">
+            <label class="sidebar-label">Project</label>
+            <select id="project-select" class="sidebar-select">
+                <option value="">Select project…</option>
+            </select>
+        </div>
 
-        <section id="timeline" class="panel">
-            <h2>Timeline</h2>
-            <div id="entries-list">
-                <p class="muted">No entries yet.</p>
+        <nav class="sidebar-nav">
+            <a class="nav-item active" data-tab="timeline" href="#">
+                <span class="nav-icon">◈</span>
+                <span>Timeline</span>
+            </a>
+            <a class="nav-item" data-tab="costs" href="#">
+                <span class="nav-icon">◎</span>
+                <span>Token Usage</span>
+            </a>
+            <a class="nav-item" data-tab="open-items" href="#">
+                <span class="nav-icon">◻</span>
+                <span>Open Items</span>
+                <span class="nav-badge" id="open-items-badge" style="display:none"></span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <span class="sidebar-label">Auto-refreshing every 10s</span>
+        </div>
+    </aside>
+
+    <!-- ── Main ── -->
+    <div class="main">
+
+        <!-- Top bar -->
+        <div class="topbar">
+            <div class="topbar-left">
+                <h2 class="page-title" id="page-title">Timeline</h2>
             </div>
-        </section>
+            <div class="topbar-right">
+                <div class="stat-pills" id="stat-pills"></div>
+                <select id="timeframe-select" class="topbar-select">
+                    <option value="session">This session</option>
+                    <option value="today" selected>Today</option>
+                    <option value="last_1h">Last hour</option>
+                    <option value="last_30m">Last 30m</option>
+                    <option value="week">This week</option>
+                </select>
+            </div>
+        </div>
 
-        <section id="open-items-panel" class="panel">
-            <h2>Open Items</h2>
+        <!-- ── Tab: Timeline ── -->
+        <div class="tab-panel active" id="tab-timeline">
+            <div class="filter-bar" id="filter-bar"></div>
+            <div class="entries-wrap">
+                <div id="entries-list">
+                    <p class="empty-state">Select a project to view the timeline.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Tab: Token Usage ── -->
+        <div class="tab-panel" id="tab-costs">
+            <div class="cost-grid" id="cost-overview"></div>
+            <div class="cost-sections">
+                <div class="cost-section">
+                    <h3 class="section-title">By Model</h3>
+                    <div id="cost-by-model">
+                        <p class="empty-state">No cost data yet. Use <code>acta_record_cost</code> to track usage.</p>
+                    </div>
+                </div>
+                <div class="cost-section">
+                    <h3 class="section-title">By Session</h3>
+                    <div id="cost-by-session">
+                        <p class="empty-state">No session cost data yet.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Tab: Open Items ── -->
+        <div class="tab-panel" id="tab-open-items">
             <div id="open-items-list">
-                <p class="muted">No open items.</p>
+                <p class="empty-state">No open items.</p>
             </div>
-        </section>
-    </main>
+        </div>
 
-    <script src="app.js"></script>
+    </div>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>
