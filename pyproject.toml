@@ -9,16 +9,19 @@ description = "Agent-native development ledger — captures why and how your cod
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
-keywords = ["development", "ledger", "mcp", "agent", "llm", "cursor"]
+keywords = ["development", "ledger", "mcp", "agent", "llm", "cursor", "langgraph", "devtools"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Documentation",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
 ]
 dependencies = [
     "click>=8.0",
@@ -45,6 +48,7 @@ acta = "acta.cli:main"
 Homepage = "https://github.com/ArnavDalmia/acta"
 Repository = "https://github.com/ArnavDalmia/acta"
 Documentation = "https://github.com/ArnavDalmia/acta#readme"
+"Bug Tracker" = "https://github.com/ArnavDalmia/acta/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/acta"]

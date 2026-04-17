@@ -1,5 +1,10 @@
 # Acta — Agent-Native Development Ledger
 
+[![CI](https://github.com/ArnavDalmia/acta/actions/workflows/ci.yml/badge.svg)](https://github.com/ArnavDalmia/acta/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/acta-ledger)](https://pypi.org/project/acta-ledger/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 **Git records *what* changed. Acta records *why* and *how* it changed.**
 
 Acta is a local-first, structured development ledger that captures intent, decisions, experiments, results, blockers, and costs during AI-assisted coding sessions. It runs entirely on your machine, connects to your AI coding tool via [MCP](https://modelcontextprotocol.io), and builds a durable, queryable record of how your software came to be.
@@ -332,11 +337,17 @@ LangGraph Agent ──► MCP Server
 ## Development
 
 ```bash
-git clone https://github.com/acta-ledger/acta.git
+git clone https://github.com/ArnavDalmia/acta.git
 cd acta
 pip install -e ".[dev]"
 pytest
 ```
+
+---
+
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first — it covers what we will and won't merge, how to add new MCP tools, and how to add new LLM providers.
 
 ---
 
