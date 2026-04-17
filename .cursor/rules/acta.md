@@ -8,3 +8,4 @@ When working on this project, use the Acta development ledger tools:
 - Before committing, log a "commit_summary"
 - Use acta_get_recent_context to recall what happened recently
 - Use acta_get_open_items to check pending todos and blockers
+- If invoked by Cursor/Claude/VSC Agent, please self report model name from context

@@ -54,16 +54,48 @@ def get_graph():
     return _graph
 
 
-def create_llm(provider: str, model: str, api_key: str):
-    """Create an LLM instance based on provider."""
+def create_llm(
+    provider: str,
+    model: str,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+):
+    """Create an LLM instance based on provider.
+
+    Supported providers:
+        openai    — OpenAI API (BYOK, requires api_key)
+        anthropic — Anthropic API (BYOK, requires api_key)
+        deepseek  — DeepSeek API (BYOK, requires api_key)
+        ollama    — Local Ollama server (no api_key needed)
+    """
     if provider == "openai":
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(model=model, api_key=api_key)
+
     elif provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
         return ChatAnthropic(model=model, api_key=api_key)
+
+    elif provider == "deepseek":
+        # DeepSeek exposes an OpenAI-compatible API
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model,
+            api_key=api_key,
+            base_url=base_url or "https://api.deepseek.com/v1",
+        )
+
+    elif provider == "ollama":
+        # Local Ollama server — no API key required
+        from langchain_ollama import ChatOllama
+        return ChatOllama(
+            model=model,
+            base_url=base_url or "http://localhost:11434",
+        )
+
     else:
-        raise ValueError(f"Unsupported provider: {provider}. Use 'openai' or 'anthropic'.")
+        valid = "openai, anthropic, deepseek, ollama"
+        raise ValueError(f"Unsupported provider: '{provider}'. Valid options: {valid}")
 
 
 def process_observation(
@@ -76,6 +108,7 @@ def process_observation(
     git_context: Optional[str] = None,
     files: Optional[list[str]] = None,
     branch: Optional[str] = None,
+    model_name: Optional[str] = None,
 ) -> dict:
     """Run a single observation through the agent graph.
 
@@ -94,7 +127,7 @@ def process_observation(
         "git_context": git_context or "",
         "files": files or [],
         "branch": branch,
-        "model_name": getattr(llm, "model_name", None) or getattr(llm, "model", None),
+        "model_name": model_name or getattr(llm, "model_name", None) or getattr(llm, "model", None),
     }
 
     result = graph.invoke(initial_state)

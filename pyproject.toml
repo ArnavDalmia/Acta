@@ -31,6 +31,7 @@ agent = [
     "langgraph>=0.2",
     "langchain-openai>=0.2",
     "langchain-anthropic>=0.3",
+    "langchain-ollama>=0.2",
 ]
 dev = [
     "pytest>=7.0",

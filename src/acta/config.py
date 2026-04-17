@@ -28,6 +28,14 @@ DEFAULT_UI_PORT = 7433
 DEFAULT_MODEL = "gpt-4.1-mini"
 DEFAULT_PROVIDER = "openai"
 
+# Default models per provider (used in docs/hints only)
+PROVIDER_DEFAULT_MODELS = {
+    "openai": "gpt-4.1-mini",
+    "anthropic": "claude-haiku-3-5-20241022",
+    "deepseek": "deepseek-chat",
+    "ollama": "llama3.2",
+}
+
 PROJECT_CONFIG_DIR = ".acta"
 PROJECT_CONFIG_FILE = "project.json"
 USER_CONFIG_PATH = DEFAULT_DB_DIR / "config.toml"
@@ -51,6 +59,7 @@ class AgentConfig:
     provider: str = DEFAULT_PROVIDER
     model: str = DEFAULT_MODEL
     api_key: Optional[str] = None
+    base_url: Optional[str] = None  # override for ollama host or deepseek-compatible endpoints
 
 
 @dataclass
@@ -92,6 +101,8 @@ def _apply_env(cfg: ActaConfig) -> None:
         cfg.agent.provider = v
     if v := os.environ.get("ACTA_LLM_MODEL"):
         cfg.agent.model = v
+    if v := os.environ.get("ACTA_LLM_BASE_URL"):
+        cfg.agent.base_url = v
 
 
 def _apply_toml(cfg: ActaConfig, data: dict) -> None:
@@ -117,6 +128,8 @@ def _apply_toml(cfg: ActaConfig, data: dict) -> None:
             cfg.agent.model = v
         if v := agent.get("api_key_env"):
             cfg.agent.api_key = os.environ.get(v)
+        if v := agent.get("base_url"):
+            cfg.agent.base_url = v
 
     if ui := data.get("ui"):
         if "enabled" in ui:

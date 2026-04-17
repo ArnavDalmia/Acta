@@ -25,7 +25,8 @@ Low relevance (0.0-0.3): trivial edits, linter fixes, formatting changes, repeat
 Observation:
 {observation}
 
-Respond with ONLY a JSON object: {{"score": <float>, "reason": "<brief reason>"}}"""
+You MUST respond with ONLY a valid JSON object on a single line, no other text, no markdown, no explanation.
+Example: {{"score": 0.8, "reason": "architectural decision"}}"""""
 
 CLASSIFY_PROMPT = """You are a development event classifier. Given the following observation, classify it into exactly one entry type.
 
@@ -43,12 +44,13 @@ Entry types:
 Observation:
 {observation}
 
-Respond with ONLY a JSON object: {{"entry_type": "<type>", "confidence": <float>}}"""
+You MUST respond with ONLY a valid JSON object on a single line, no other text, no markdown, no explanation.
+Example: {{"entry_type": "decision", "confidence": 0.9}}"""""
 
 SUMMARIZE_PROMPT = """You are a concise technical writer for a development ledger. Summarize the following observation into a clear, structured entry.
 
 Rules:
-- 1-3 sentences maximum
+- 1-3 sentences maximum for the summary
 - Focus on the what and why, not the how
 - Use precise technical language
 - Do not include timestamps or metadata
@@ -57,7 +59,8 @@ Entry type: {entry_type}
 Observation:
 {observation}
 
-Respond with ONLY a JSON object: {{"summary": "<concise summary>", "details": "<optional extended context or null>"}}"""
+You MUST respond with ONLY a valid JSON object on a single line, no other text, no markdown, no explanation.
+Example: {{"summary": "Chose JWT over sessions for scalability.", "details": null}}"""""
 
 
 def observe_context(state: ActaAgentState) -> dict[str, Any]:

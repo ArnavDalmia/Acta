@@ -241,7 +241,11 @@ def config(key: Optional[str], value: Optional[str]):
         click.echo(f"Agent:      {'enabled' if cfg.agent.enabled else 'disabled'}")
         click.echo(f"Provider:   {cfg.agent.provider}")
         click.echo(f"Model:      {cfg.agent.model}")
-        click.echo(f"API Key:    {'set' if cfg.agent.api_key else 'not set'}")
+        if cfg.agent.provider == "ollama":
+            click.echo(f"Base URL:   {cfg.agent.base_url or 'http://localhost:11434 (default)'}")
+        elif cfg.agent.provider == "deepseek":
+            click.echo(f"Base URL:   {cfg.agent.base_url or 'https://api.deepseek.com/v1 (default)'}")
+        click.echo(f"API Key:    {'set' if cfg.agent.api_key else 'not set (not required for ollama)'}")
         click.echo(f"UI:         {'enabled' if cfg.ui.enabled else 'disabled'} (port {cfg.ui.port})")
         return
 
