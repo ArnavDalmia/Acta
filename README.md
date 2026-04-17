@@ -31,16 +31,28 @@ Acta captures all of this automatically, in a structured format that both humans
 pip install acta-ledger
 ```
 
-### 2. Initialize a project
+### 2. Run the setup wizard
+
+```bash
+acta setup
+```
+
+The wizard walks you through:
+- Database location
+- LLM provider (or none — Cursor handles it by default)
+- API key / connection instructions
+- Cursor MCP config to paste in
+
+### 3. Initialize your project
 
 ```bash
 cd your-project/
-acta init --name "my-app"
+acta init
 ```
 
-### 3. Connect to Cursor
+### 4. Connect to Cursor
 
-Add to your `.cursor/mcp.json`:
+Add to your project's `.cursor/mcp.json`:
 
 ```json
 {
@@ -53,7 +65,9 @@ Add to your `.cursor/mcp.json`:
 }
 ```
 
-### 4. Add a Cursor Rule (recommended)
+Restart Cursor — Acta appears automatically in the MCP tools list.
+
+### 5. Add a Cursor Rule (recommended)
 
 Create `.cursor/rules/acta.md`:
 
@@ -68,9 +82,10 @@ When working on this project, use the Acta development ledger tools:
 - Before committing, log a "commit_summary"
 - Use acta_get_recent_context to recall what happened recently
 - Use acta_get_open_items to check pending todos and blockers
+- Always pass your model name in the model field when calling acta_append_entry
 ```
 
-### 5. Start coding
+### 6. Start coding
 
 Your AI assistant will now use Acta tools to maintain a development ledger as you work.
 
@@ -80,7 +95,8 @@ Your AI assistant will now use Acta tools to maintain a development ledger as yo
 
 | Command | Description |
 |---|---|
-| `acta init --name "project"` | Initialize Acta for the current directory |
+| `acta setup` | Interactive setup wizard — configure provider, API key, MCP config |
+| `acta init` | Initialize Acta for the current directory |
 | `acta serve` | Start the MCP server (stdio transport) |
 | `acta serve --ui` | Start MCP server + web viewer |
 | `acta status` | Show project info, active session, entry count |
@@ -130,7 +146,7 @@ Acta exposes these tools via MCP for your AI coding assistant:
 
 ### Cursor
 
-See [Quick Start](#3-connect-to-cursor) above. Cursor natively supports MCP servers.
+See [Quick Start](#4-connect-to-cursor) above. Cursor natively supports MCP servers.
 
 ### Claude Desktop
 
@@ -168,9 +184,7 @@ Add to `.vscode/mcp.json`:
 
 Acta uses a layered config system: **defaults < user config < project config < env vars**.
 
-### Config file
-
-Create `~/.acta/config.toml`:
+Run `acta setup` to generate your config interactively, or create `~/.acta/config.toml` manually:
 
 ```toml
 [core]
@@ -183,8 +197,9 @@ transport = "stdio"
 
 [agent]
 enabled = false
-provider = "openai"        # or "anthropic"
+provider = "openai"        # openai | anthropic | deepseek | ollama
 model = "gpt-4.1-mini"
+api_key_env = "ACTA_LLM_API_KEY"
 
 [ui]
 enabled = false
@@ -197,24 +212,80 @@ port = 7433
 |---|---|
 | `ACTA_DB_PATH` | Database file location |
 | `ACTA_LLM_API_KEY` | API key for agent LLM calls |
-| `ACTA_LLM_PROVIDER` | `openai` or `anthropic` |
+| `ACTA_LLM_PROVIDER` | `openai`, `anthropic`, `deepseek`, or `ollama` |
 | `ACTA_LLM_MODEL` | Model name |
+| `ACTA_LLM_BASE_URL` | Override API base URL (Ollama host, custom endpoints) |
 | `ACTA_SERVER_PORT` | MCP server port |
 
 ---
 
 ## Agent Mode (Optional)
 
-Acta includes an optional LangGraph-based agent that can automatically observe, classify, and log events. This requires an LLM API key (BYOK).
+Acta includes an optional LangGraph-based agent that automatically observes, classifies, and logs events. Without it, your AI coding tool (Cursor, Claude, etc.) calls Acta tools directly — **this is the recommended, zero-cost default**.
+
+To enable agent mode, install the extras and configure a provider:
 
 ```bash
 pip install acta-ledger[agent]
-export ACTA_LLM_API_KEY="your-api-key"
 ```
 
-The agent runs the flow: **Observe → Filter → Classify → Summarize → Persist**
+Acta supports four LLM providers for agent mode:
 
-Without the agent, your AI coding tool (Cursor, Claude, etc.) calls Acta tools directly — this is the recommended, zero-cost approach.
+### OpenAI
+
+```toml
+[agent]
+enabled = true
+provider = "openai"
+model = "gpt-4.1-mini"
+api_key_env = "ACTA_LLM_API_KEY"
+```
+
+```bash
+export ACTA_LLM_API_KEY="sk-..."
+```
+
+### Anthropic
+
+```toml
+[agent]
+enabled = true
+provider = "anthropic"
+model = "claude-haiku-3-5-20241022"
+api_key_env = "ACTA_LLM_API_KEY"
+```
+
+### DeepSeek (low-cost API)
+
+```toml
+[agent]
+enabled = true
+provider = "deepseek"
+model = "deepseek-chat"
+api_key_env = "ACTA_LLM_API_KEY"
+```
+
+Get a key at [platform.deepseek.com](https://platform.deepseek.com).
+
+### Ollama (local, free, no API key)
+
+```toml
+[agent]
+enabled = true
+provider = "ollama"
+model = "llama3.2"          # or mistral, phi3, gemma2, etc.
+base_url = "http://localhost:11434"   # optional — this is the default
+```
+
+Install Ollama from [ollama.com](https://ollama.com), then:
+
+```bash
+ollama pull llama3.2
+```
+
+No API key. Fully offline. Works air-gapped.
+
+The agent runs the flow: **Observe → Filter → Classify → Summarize → Persist**
 
 ---
 
@@ -227,11 +298,10 @@ acta serve --ui
 ```
 
 Open `http://127.0.0.1:7433` to see:
-- Timeline of all entries
+- Timeline of all entries with session boundaries
 - Filter by entry type
-- Session boundaries
 - Progress summary
-- Open items
+- Open todos and blockers
 
 ---
 
@@ -250,6 +320,11 @@ Acta Core (Python library)
     │  projects, sessions, entries, costs
     ▼
 SQLite Database (~/.acta/acta.db)
+
+Optional:
+LangGraph Agent ──► MCP Server
+    observes context, classifies, summarizes
+    supports: OpenAI, Anthropic, DeepSeek, Ollama
 ```
 
 ---

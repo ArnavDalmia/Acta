@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Optional
@@ -12,12 +13,23 @@ import click
 from acta import __version__
 from acta.config import (
     DEFAULT_DB_PATH,
+    PROVIDER_DEFAULT_MODELS,
     PROJECT_CONFIG_DIR,
     PROJECT_CONFIG_FILE,
+    USER_CONFIG_PATH,
     load_config,
 )
 from acta.core.database import Database
 from acta.core.models import EntryType
+
+# ── Helpers ───────────────────────────────────────────────────
+
+_DIVIDER = "─" * 52
+
+def _section(title: str):
+    click.echo(f"\n{_DIVIDER}")
+    click.echo(f"  {title}")
+    click.echo(_DIVIDER)
 
 
 def _get_db() -> Database:
@@ -53,8 +65,8 @@ def main():
 
 
 @main.command()
-@click.option("--name", prompt="Project name", help="Name for this project")
-def init(name: str):
+@click.option("--name", default=None, help="Name for this project")
+def init(name: Optional[str]):
     """Initialize Acta for the current directory."""
     db = _get_db()
     cwd = str(Path.cwd())
@@ -63,6 +75,9 @@ def init(name: str):
     if existing:
         click.echo(f"Project already initialized: {existing.name} ({existing.id})")
         return
+
+    if not name:
+        name = click.prompt("Project name", default=Path.cwd().name)
 
     project = db.create_project(name=name, path=cwd)
 
@@ -73,9 +88,195 @@ def init(name: str):
     with open(project_file, "w") as f:
         json.dump({"project_id": project.id, "name": project.name}, f, indent=2)
 
-    click.echo(f"Initialized Acta project '{name}' ({project.id})")
-    click.echo(f"Config: {project_file}")
-    click.echo(f"Database: {db.db_path}")
+    click.echo(f"\n  Initialized Acta project '{name}' ({project.id})")
+    click.echo(f"  Config:   {project_file}")
+    click.echo(f"  Database: {db.db_path}")
+    click.echo(f"\n  Next: add Acta to your Cursor MCP config, then run 'acta serve'")
+    click.echo(f"  Run 'acta setup' to configure your LLM provider.")
+
+
+@main.command()
+def setup():
+    """Interactive setup wizard — configure Acta and your LLM provider."""
+    click.echo(f"\n  Acta Setup Wizard v{__version__}")
+
+    # ── Step 1: Database location ──────────────────────────────
+    _section("Step 1 / 4 — Database")
+    click.echo(f"  Where should Acta store its database?")
+    click.echo(f"  Default: {DEFAULT_DB_PATH}")
+    click.echo()
+    use_default_db = click.confirm("  Use the default location?", default=True)
+    if use_default_db:
+        db_path = str(DEFAULT_DB_PATH)
+    else:
+        db_path = click.prompt("  Database path", default=str(DEFAULT_DB_PATH))
+
+    # ── Step 2: LLM provider ───────────────────────────────────
+    _section("Step 2 / 4 — LLM Provider (for agent mode)")
+    click.echo("  Acta's agent layer uses an LLM to classify and summarize entries.")
+    click.echo("  Without an LLM, Cursor's built-in model handles this automatically")
+    click.echo("  (no API key required — recommended for most users).\n")
+
+    providers = ["none (Cursor handles it)", "openai", "anthropic", "deepseek", "ollama"]
+    for i, p in enumerate(providers):
+        click.echo(f"    [{i}] {p}")
+
+    choice = click.prompt("\n  Choose a provider", default="0")
+    try:
+        provider_choice = providers[int(choice)]
+    except (ValueError, IndexError):
+        provider_choice = "none (Cursor handles it)"
+
+    provider = None if provider_choice.startswith("none") else provider_choice
+    api_key = None
+    model = None
+    base_url = None
+    agent_enabled = False
+
+    if provider:
+        agent_enabled = True
+        default_model = PROVIDER_DEFAULT_MODELS.get(provider, "")
+
+        # ── Step 3: API key / connection ──────────────────────
+        _section("Step 3 / 4 — Provider Configuration")
+
+        if provider == "ollama":
+            click.echo("  Ollama runs locally — no API key needed.")
+            click.echo("  Make sure Ollama is installed: https://ollama.com\n")
+            base_url = click.prompt(
+                "  Ollama base URL", default="http://localhost:11434"
+            )
+            click.echo(f"\n  Recommended models (run 'ollama pull <model>' first):")
+            click.echo("    llama3.2, mistral, phi3, gemma2")
+            model = click.prompt("  Model name", default=default_model)
+
+        elif provider == "deepseek":
+            click.echo("  DeepSeek requires an API key from https://platform.deepseek.com\n")
+            click.echo("  Your key will NOT be stored in the config file.")
+            click.echo("  It will be read from the environment variable: ACTA_LLM_API_KEY\n")
+            env_path = click.prompt(
+                "  Path to your .env file (or press Enter to set manually)",
+                default="",
+            )
+            if env_path:
+                _show_env_instructions(env_path, "ACTA_LLM_API_KEY", "your-deepseek-api-key")
+            else:
+                click.echo("\n  Set this in your shell or .env file:")
+                click.echo("    ACTA_LLM_API_KEY=your-deepseek-api-key")
+            base_url = click.prompt(
+                "\n  DeepSeek base URL", default="https://api.deepseek.com/v1"
+            )
+            model = click.prompt("  Model name", default=default_model)
+
+        else:  # openai or anthropic
+            provider_url = (
+                "https://platform.openai.com/api-keys"
+                if provider == "openai"
+                else "https://console.anthropic.com/settings/keys"
+            )
+            click.echo(f"  Get your API key from: {provider_url}\n")
+            click.echo("  Your key will NOT be stored in the config file.")
+            click.echo("  It will be read from the environment variable: ACTA_LLM_API_KEY\n")
+            env_path = click.prompt(
+                "  Path to your .env file (or press Enter to skip)",
+                default="",
+            )
+            if env_path:
+                _show_env_instructions(env_path, "ACTA_LLM_API_KEY", f"your-{provider}-api-key")
+            else:
+                click.echo("\n  Set this in your shell or .env file:")
+                click.echo(f"    ACTA_LLM_API_KEY=your-{provider}-api-key")
+            model = click.prompt("\n  Model name", default=default_model)
+    else:
+        _section("Step 3 / 4 — Provider Configuration")
+        click.echo("  Skipped — Cursor's agent will call Acta tools directly.")
+        click.echo("  No API key needed. This is the recommended default.")
+
+    # ── Step 4: Cursor MCP config ──────────────────────────────
+    _section("Step 4 / 4 — Connect to Cursor")
+    click.echo("  Add this to your project's .cursor/mcp.json:\n")
+    click.echo('  {')
+    click.echo('    "mcpServers": {')
+    click.echo('      "acta": {')
+    click.echo('        "command": "acta",')
+    click.echo('        "args": ["serve", "--transport", "stdio"]')
+    click.echo('      }')
+    click.echo('    }')
+    click.echo('  }\n')
+    click.echo("  Then restart Cursor. Acta will appear in the MCP tools list.\n")
+
+    claude_config = click.confirm(
+        "  Also show Claude Desktop config?", default=False
+    )
+    if claude_config:
+        click.echo("\n  Add to claude_desktop_config.json (same structure as above).\n")
+
+    # ── Write config file ──────────────────────────────────────
+    _section("Writing Configuration")
+
+    config_lines = [
+        "[core]",
+        f'db_path = "{db_path}"',
+        "",
+        "[server]",
+        'host = "127.0.0.1"',
+        "port = 7432",
+        'transport = "stdio"',
+        "",
+        "[agent]",
+        f"enabled = {'true' if agent_enabled else 'false'}",
+    ]
+
+    if provider:
+        config_lines.append(f'provider = "{provider}"')
+        config_lines.append(f'model = "{model}"')
+        config_lines.append('api_key_env = "ACTA_LLM_API_KEY"')
+        if base_url:
+            config_lines.append(f'base_url = "{base_url}"')
+
+    config_lines += ["", "[ui]", "enabled = false", "port = 7433", ""]
+
+    config_content = "\n".join(config_lines)
+    config_path = USER_CONFIG_PATH
+
+    click.echo(f"\n  Config will be written to: {config_path}")
+    click.echo(f"\n  Preview:\n")
+    for line in config_lines:
+        click.echo(f"    {line}")
+
+    click.echo()
+    if click.confirm("  Write this config?", default=True):
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, "w") as f:
+            f.write(config_content)
+        click.echo(f"\n  Config written to {config_path}")
+    else:
+        click.echo("\n  Config not written. You can edit it manually at:")
+        click.echo(f"  {config_path}")
+
+    # ── Done ───────────────────────────────────────────────────
+    _section("Done")
+    click.echo("  Acta is ready. Next steps:\n")
+    click.echo("    1. cd into your project directory")
+    click.echo("    2. acta init")
+    click.echo("    3. Add .cursor/mcp.json (shown above)")
+    click.echo("    4. Restart Cursor")
+    if provider and provider != "ollama":
+        click.echo("    5. Set ACTA_LLM_API_KEY in your environment or .env file")
+    click.echo()
+
+
+def _show_env_instructions(env_path: str, key: str, placeholder: str):
+    """Print instructions for adding a key to a .env file."""
+    path = Path(env_path)
+    click.echo(f"\n  Add this line to {path}:\n")
+    click.echo(f"    {key}={placeholder}\n")
+    if not path.exists():
+        click.echo(f"  (File doesn't exist yet — it will be created when you add that line)")
+    else:
+        existing = path.read_text()
+        if key in existing:
+            click.echo(f"  Note: {key} already exists in that file — update the value there.")
 
 
 @main.command()
