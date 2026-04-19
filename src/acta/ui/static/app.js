@@ -1,4 +1,6 @@
 // ── Constants ──────────────────────────────────────────────
+const THEME_STORAGE_KEY = "acta-ui-theme";
+
 const ENTRY_TYPES = [
     "intent", "decision", "experiment", "result",
     "todo", "blocker", "commit_summary", "session_summary", "cost_update"
@@ -348,7 +350,56 @@ document.querySelectorAll(".nav-item").forEach(el => {
     });
 });
 
+// ── Theme (dark default, optional light) ───────────────────
+function getStoredTheme() {
+    try {
+        return localStorage.getItem(THEME_STORAGE_KEY);
+    } catch {
+        return null;
+    }
+}
+
+function applyTheme(mode, persist) {
+    const root = document.documentElement;
+    if (mode === "light") {
+        root.setAttribute("data-theme", "light");
+    } else {
+        root.removeAttribute("data-theme");
+    }
+    syncThemeToggle(mode);
+    if (!persist) return;
+    try {
+        if (mode === "light") {
+            localStorage.setItem(THEME_STORAGE_KEY, "light");
+        } else {
+            localStorage.removeItem(THEME_STORAGE_KEY);
+        }
+    } catch {
+        /* ignore */
+    }
+}
+
+function syncThemeToggle(mode) {
+    const btn = document.getElementById("theme-toggle");
+    if (!btn) return;
+    const isLight = mode === "light";
+    btn.textContent = isLight ? "🌙" : "☀️";
+    btn.setAttribute("aria-label", isLight ? "Switch to dark mode" : "Switch to light mode");
+    btn.setAttribute("title", isLight ? "Dark mode" : "Light mode");
+}
+
+function initTheme() {
+    const stored = getStoredTheme();
+    const mode = stored === "light" ? "light" : "dark";
+    applyTheme(mode, false);
+    document.getElementById("theme-toggle")?.addEventListener("click", () => {
+        const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+        applyTheme(next, true);
+    });
+}
+
 // ── Boot ───────────────────────────────────────────────────
+initTheme();
 initFilters();
 loadProjects();
 setInterval(() => { if (state.projectId) refresh(); }, 10000);

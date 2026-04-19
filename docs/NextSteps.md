@@ -26,6 +26,7 @@ Token data is stored and displayed correctly, but nothing calls `acta_record_cos
 
 - [ ] Update `.cursor/rules/acta.md` to instruct Cursor's agent to call `acta_record_cost` after each response with token counts and model name
 - [ ] Confirm the Cursor API exposes token counts to the agent context (may need to estimate from response length as a fallback)
+- [ ] When the LangGraph pipeline is invoked (Cursor stop hook, future `acta agent …` CLI, etc.), record that pipeline's own LLM usage into the costs table as well (today the graph does not call `record_cost` — wire it when that path ships)
 - [ ] Test that costs populate in the Token Usage tab after a few interactions
 
 ### Phase 4 — PR Description Generator (UI)
@@ -85,13 +86,31 @@ Reads the session's `intent`, `decisions`, `experiments`, `results`, and `commit
 
 ---
 
-### 2. Git Hooks Integration
+### 2. Cursor hooks + ledger pipeline on `stop`
 
-Removes the dependency on the AI agent following the Cursor Rule correctly. Captures events automatically:
+Replaces the earlier **git-hooks-first** plan for automatic capture. Removes reliance on the IDE agent remembering to call Acta MCP on every turn by running a **project hook** when Cursor finishes an agent cycle.
 
-- **pre-commit hook** — auto-generates a `commit_summary` entry from staged diff + recent session context
-- **post-merge hook** — logs what was merged and when
-- `acta install-hooks` as a new CLI command
+**Behavior**
+
+- Configure **Cursor command hooks** (project: `.cursor/hooks.json` + `.cursor/hooks/…`) on the **`stop`** event (validate in the Hooks UI / output channel; fall back to `afterAgentResponse` if `stop` is too coarse or missing for a given mode).
+- On **every** eligible stop, run a small script that:
+  - Reads **hook JSON from stdin** and extracts as much **safe** context as Cursor exposes (assistant text, metadata, tool summaries if present — confirm field names once per Cursor version).
+  - Optionally appends a **local audit trail** (e.g. under `.acta/`, redacted) for debugging; optional **`git diff` / `git status --short`** from repo root when git is available (nice-to-have, not required).
+  - Invokes a stable **Acta entrypoint** (recommended: `acta agent log-stop` or similar CLI that loads config, DB, `create_llm`, and calls **`process_observation`** with `chat_snippets`, `tool_events`, `git_context`, `session_id`, etc.).
+
+**Pipeline reality (today) — document before building**
+
+- One call to **`process_observation`** runs the graph **once** and, if not skipped, persists **at most one** ledger entry (single relevance → single classify → single summarize → single `persist_entry`).
+- A **large** interaction that should become **many** typed entries is **not** supported in one graph pass today.
+
+**Follow-ups (choose in implementation)**
+
+- [ ] **Hook/script layer:** segment the observation (heuristics or a dedicated “split” LLM step outside the current graph) and call **`process_observation` multiple times** per stop, with dedupe keys to avoid double-writes.
+- [ ] **Pipeline (optional later):** extend LangGraph with a **multi-entry** phase (e.g. model returns N structured `{entry_type, summary, details}` → validate → loop `append_entry`), only if we want one LLM call to fan out to many rows.
+
+**Optional complement (unchanged idea, lower priority)**
+
+- Git **pre-commit** / **post-merge** hooks and `acta install-hooks` remain useful for **commit-time** `commit_summary` and merge notes, orthogonal to Cursor `stop`.
 
 ---
 
@@ -173,7 +192,7 @@ security_note = "Security-relevant observation requiring review"
 |---|---|---|
 | 1 | PyPI publish + VS Code integration | Closes V1, enables real adoption |
 | 2 | `acta generate pr` | High-value, great demo, drives GitHub stars |
-| 3 | Git hooks | Removes reliance on agent discipline |
+| 3 | Cursor hooks + pipeline on `stop` | Removes reliance on agent discipline per agent cycle |
 | 4 | `acta sync` via Git | Solves team sharing cleanly |
 | 5 | `acta replay` | Makes the ledger useful retrospectively |
 | 6 | `acta_get_full_context` tool | Solves cold-start, improves daily UX |
