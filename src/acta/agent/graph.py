@@ -16,6 +16,7 @@ from acta.agent.nodes import (
     summarize_and_normalize,
 )
 from acta.agent.state import ActaAgentState
+from acta.core.cost import TokenUsage, extract_usage, resolve_model_name
 
 _graph = None
 
@@ -98,6 +99,29 @@ def create_llm(
         raise ValueError(f"Unsupported provider: '{provider}'. Valid options: {valid}")
 
 
+class _UsageTrackingLLM:
+    """Transparent LangChain-compatible wrapper that records token usage.
+
+    Every ``invoke`` delegates to the underlying LLM and appends the
+    extracted :class:`TokenUsage` to ``usage_log``. Attribute access
+    (including ``model_name``/``model``) passes through to the inner
+    object so downstream code sees the same shape as the real LLM.
+    """
+
+    def __init__(self, inner: Any, usage_log: list[TokenUsage]):
+        object.__setattr__(self, "_inner", inner)
+        object.__setattr__(self, "_usage_log", usage_log)
+
+    def invoke(self, prompt, *args, **kwargs):  # type: ignore[override]
+        response = self._inner.invoke(prompt, *args, **kwargs)
+        text_prompt = prompt if isinstance(prompt, str) else str(prompt)
+        self._usage_log.append(extract_usage(response, prompt=text_prompt))
+        return response
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
 def process_observation(
     project_id: str,
     db: Any,
@@ -109,28 +133,70 @@ def process_observation(
     files: Optional[list[str]] = None,
     branch: Optional[str] = None,
     model_name: Optional[str] = None,
+    record_costs: bool = True,
 ) -> dict:
     """Run a single observation through the agent graph.
 
+    If ``record_costs`` is True (default), all LLM calls made by the
+    graph are tallied and persisted as a single ``costs`` row against
+    the project/session. The model name is resolved from the LLM
+    object itself (or ``model_name`` if provided).
+
     Returns the final state dict with entry_id and persisted flag if logged,
-    or should_log=False if the observation was filtered out.
+    or should_log=False if the observation was filtered out. When costs
+    are recorded, ``tokens_in``, ``tokens_out``, and ``cost_estimated``
+    are also included.
     """
     graph = get_graph()
+
+    resolved_model = (
+        model_name
+        or getattr(llm, "model_name", None)
+        or getattr(llm, "model", None)
+    )
+
+    usage_log: list[TokenUsage] = []
+    graph_llm: Any = _UsageTrackingLLM(llm, usage_log) if record_costs else llm
 
     initial_state: ActaAgentState = {
         "project_id": project_id,
         "session_id": session_id,
-        "llm": llm,
+        "llm": graph_llm,
         "db": db,
         "chat_snippets": chat_snippets or [],
         "tool_events": tool_events or [],
         "git_context": git_context or "",
         "files": files or [],
         "branch": branch,
-        "model_name": model_name or getattr(llm, "model_name", None) or getattr(llm, "model", None),
+        "model_name": resolved_model,
     }
 
     result = graph.invoke(initial_state)
+
+    cost_payload: dict[str, Any] = {}
+    if record_costs and usage_log:
+        total = TokenUsage()
+        for u in usage_log:
+            total = total + u
+        if total.total > 0:
+            model_for_cost = resolve_model_name(llm, fallback=resolved_model)
+            try:
+                db.record_cost(
+                    project_id=project_id,
+                    tokens_in=total.tokens_in,
+                    tokens_out=total.tokens_out,
+                    model=model_for_cost,
+                    session_id=session_id,
+                )
+            except Exception:
+                # Cost tracking must never break the pipeline.
+                pass
+            cost_payload = {
+                "tokens_in": total.tokens_in,
+                "tokens_out": total.tokens_out,
+                "cost_estimated": total.estimated,
+                "llm_calls": len(usage_log),
+            }
 
     return {
         "persisted": result.get("persisted", False),
@@ -139,4 +205,5 @@ def process_observation(
         "summary": result.get("summary"),
         "relevance_score": result.get("relevance_score"),
         "should_log": result.get("should_log", False),
+        **cost_payload,
     }

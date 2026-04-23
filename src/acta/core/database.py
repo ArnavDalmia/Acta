@@ -326,6 +326,42 @@ class Database:
             ).fetchall()
         return [self._row_to_entry(r) for r in rows]
 
+    def delete_project_data(
+        self,
+        project_id: str,
+        *,
+        delete_project: bool = False,
+    ) -> dict[str, int]:
+        """Delete all data for a project.
+
+        By default removes only entries, sessions, and costs (the ledger
+        content) while keeping the project row so ``acta init`` does not need
+        to be re-run.  Pass ``delete_project=True`` to also drop the project
+        record itself.
+
+        Returns a dict with the row counts deleted for each table.
+        """
+        counts: dict[str, int] = {}
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM costs WHERE project_id = ?", (project_id,)
+            )
+            counts["costs"] = cur.rowcount
+            cur = conn.execute(
+                "DELETE FROM entries WHERE project_id = ?", (project_id,)
+            )
+            counts["entries"] = cur.rowcount
+            cur = conn.execute(
+                "DELETE FROM sessions WHERE project_id = ?", (project_id,)
+            )
+            counts["sessions"] = cur.rowcount
+            if delete_project:
+                cur = conn.execute(
+                    "DELETE FROM projects WHERE id = ?", (project_id,)
+                )
+                counts["project"] = cur.rowcount
+        return counts
+
     def get_all_entries(self, project_id: str) -> list[Entry]:
         with self._connect() as conn:
             rows = conn.execute(

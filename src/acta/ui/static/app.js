@@ -27,7 +27,7 @@ const TAB_TITLES = {
 // ── State ──────────────────────────────────────────────────
 const state = {
     projectId:   null,
-    timeframe:   "today",
+    timeframe:   "week",
     activeTab:   "timeline",
     activeTypes: new Set(ENTRY_TYPES),
     entries:     [],

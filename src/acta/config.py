@@ -126,6 +126,8 @@ def _apply_toml(cfg: ActaConfig, data: dict) -> None:
             cfg.agent.provider = v
         if v := agent.get("model"):
             cfg.agent.model = v
+        if v := agent.get("api_key"):
+            cfg.agent.api_key = v
         if v := agent.get("api_key_env"):
             cfg.agent.api_key = os.environ.get(v)
         if v := agent.get("base_url"):

@@ -152,17 +152,14 @@ def setup():
 
         elif provider == "deepseek":
             click.echo("  DeepSeek requires an API key from https://platform.deepseek.com\n")
-            click.echo("  Your key will NOT be stored in the config file.")
-            click.echo("  It will be read from the environment variable: ACTA_LLM_API_KEY\n")
-            env_path = click.prompt(
-                "  Path to your .env file (or press Enter to set manually)",
+            click.echo("  You can store it directly in ~/.acta/config.toml.")
+            api_key = click.prompt(
+                "  API key",
+                hide_input=True,
+                confirmation_prompt=True,
                 default="",
-            )
-            if env_path:
-                _show_env_instructions(env_path, "ACTA_LLM_API_KEY", "your-deepseek-api-key")
-            else:
-                click.echo("\n  Set this in your shell or .env file:")
-                click.echo("    ACTA_LLM_API_KEY=your-deepseek-api-key")
+                show_default=False,
+            ) or None
             base_url = click.prompt(
                 "\n  DeepSeek base URL", default="https://api.deepseek.com/v1"
             )
@@ -175,17 +172,14 @@ def setup():
                 else "https://console.anthropic.com/settings/keys"
             )
             click.echo(f"  Get your API key from: {provider_url}\n")
-            click.echo("  Your key will NOT be stored in the config file.")
-            click.echo("  It will be read from the environment variable: ACTA_LLM_API_KEY\n")
-            env_path = click.prompt(
-                "  Path to your .env file (or press Enter to skip)",
+            click.echo("  You can store it directly in ~/.acta/config.toml.")
+            api_key = click.prompt(
+                "  API key",
+                hide_input=True,
+                confirmation_prompt=True,
                 default="",
-            )
-            if env_path:
-                _show_env_instructions(env_path, "ACTA_LLM_API_KEY", f"your-{provider}-api-key")
-            else:
-                click.echo("\n  Set this in your shell or .env file:")
-                click.echo(f"    ACTA_LLM_API_KEY=your-{provider}-api-key")
+                show_default=False,
+            ) or None
             model = click.prompt("\n  Model name", default=default_model)
     else:
         _section("Step 3 / 4 — Provider Configuration")
@@ -230,7 +224,10 @@ def setup():
     if provider:
         config_lines.append(f'provider = "{provider}"')
         config_lines.append(f'model = "{model}"')
-        config_lines.append('api_key_env = "ACTA_LLM_API_KEY"')
+        if api_key:
+            config_lines.append(f'api_key = "{api_key}"')
+        else:
+            config_lines.append('api_key_env = "ACTA_LLM_API_KEY"')
         if base_url:
             config_lines.append(f'base_url = "{base_url}"')
 
@@ -262,21 +259,11 @@ def setup():
     click.echo("    3. Add .cursor/mcp.json (shown above)")
     click.echo("    4. Restart Cursor")
     if provider and provider != "ollama":
-        click.echo("    5. Set ACTA_LLM_API_KEY in your environment or .env file")
+        if api_key:
+            click.echo("    5. API key saved in ~/.acta/config.toml")
+        else:
+            click.echo("    5. Set ACTA_LLM_API_KEY in your environment")
     click.echo()
-
-
-def _show_env_instructions(env_path: str, key: str, placeholder: str):
-    """Print instructions for adding a key to a .env file."""
-    path = Path(env_path)
-    click.echo(f"\n  Add this line to {path}:\n")
-    click.echo(f"    {key}={placeholder}\n")
-    if not path.exists():
-        click.echo(f"  (File doesn't exist yet — it will be created when you add that line)")
-    else:
-        existing = path.read_text()
-        if key in existing:
-            click.echo(f"  Note: {key} already exists in that file — update the value there.")
 
 
 @main.command()
@@ -427,6 +414,65 @@ def summary(project_id: Optional[str]):
         click.echo(
             f"\n  Tokens: {progress.total_tokens_in:,} in / {progress.total_tokens_out:,} out"
         )
+
+
+@main.command(name="delete")
+@click.option("--project-id", default=None, help="Project ID (auto-detected from .acta/)")
+@click.option(
+    "--remove-project",
+    is_flag=True,
+    default=False,
+    help="Also delete the project record and remove .acta/project.json",
+)
+@click.option("--yes", "-y", is_flag=True, default=False, help="Skip confirmation prompt")
+def delete_project(project_id: Optional[str], remove_project: bool, yes: bool):
+    """Delete all ledger data for the current project.
+
+    Removes entries, sessions, and costs from the database.  The project
+    record itself is preserved by default so you can keep using the same
+    project ID — pass --remove-project to wipe it entirely and clean up
+    .acta/project.json.
+
+    Use this to start fresh without losing your git history or config.
+    """
+    pid = _require_project_id(project_id)
+    db = _get_db()
+
+    project = db.get_project(pid)
+    if not project:
+        click.echo(f"Error: Project {pid} not found in database.", err=True)
+        sys.exit(1)
+
+    count = db.count_entries(pid)
+    click.echo(f"Project: {project.name} ({project.id})")
+    click.echo(f"This will permanently delete:")
+    click.echo(f"  • {count} entries")
+    click.echo(f"  • all sessions and cost records")
+    if remove_project:
+        click.echo(f"  • the project record itself")
+        config_file = Path.cwd() / PROJECT_CONFIG_DIR / PROJECT_CONFIG_FILE
+        if config_file.exists():
+            click.echo(f"  • {config_file}")
+
+    if not yes:
+        click.confirm("\nAre you sure? This cannot be undone.", abort=True)
+
+    deleted = db.delete_project_data(pid, delete_project=remove_project)
+
+    click.echo(f"\nDeleted:")
+    click.echo(f"  {deleted.get('entries', 0)} entries")
+    click.echo(f"  {deleted.get('sessions', 0)} sessions")
+    click.echo(f"  {deleted.get('costs', 0)} cost records")
+
+    if remove_project:
+        click.echo(f"  project record removed")
+        config_file = Path.cwd() / PROJECT_CONFIG_DIR / PROJECT_CONFIG_FILE
+        if config_file.exists():
+            config_file.unlink()
+            click.echo(f"  removed {config_file}")
+        click.echo("\nRun 'acta init' to start a new project in this directory.")
+    else:
+        click.echo(f"\nLedger cleared. Project record kept — run 'acta serve' to start logging again.")
 
 
 @main.command()

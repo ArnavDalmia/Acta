@@ -245,9 +245,12 @@ Optional chatbot is **read-only**, grounded strictly in Acta entries.
 ## 13. OpenAI Usage
 
 - OpenAI API used **only in agent logic**
-- LangGraph calls OpenAI
+- LangGraph calls OpenAI (or Anthropic / DeepSeek / Ollama)
 - MCP does not
-- Token usage logged to Acta
+- Token usage logged to Acta automatically:
+  - The LangGraph pipeline transparently tallies every LLM call via `acta.core.cost.extract_usage` and writes one aggregated row to the `costs` table per `process_observation` run.
+  - Real usage is read from LangChain's standardized `usage_metadata`; when the provider does not expose it (e.g. some local Ollama builds), a `~4 chars/token` estimate is used instead and flagged as such.
+  - The Cursor Rule mirrors the same contract for IDE agents: call `acta_record_cost` at the end of each response, passing real counts when available or estimates otherwise.
 
 ---
 

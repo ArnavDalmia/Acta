@@ -88,7 +88,12 @@ When working on this project, use the Acta development ledger tools:
 - Use acta_get_recent_context to recall what happened recently
 - Use acta_get_open_items to check pending todos and blockers
 - Always pass your model name in the model field when calling acta_append_entry
+- At the end of every response, call acta_record_cost with your model name and
+  token counts for this turn. If the runtime does not expose real usage, estimate
+  with ~4 characters per token (tokens_in ≈ input_chars / 4, tokens_out ≈ output_chars / 4)
 ```
+
+The shipped `.cursor/rules/acta.md` in this repo is the canonical reference — copy it verbatim if in doubt.
 
 ### 6. Start coding
 
@@ -110,6 +115,8 @@ Your AI assistant will now use Acta tools to maintain a development ledger as yo
 | `acta summary` | Show today's progress summary |
 | `acta export --format json` | Export ledger as JSON |
 | `acta export --format markdown` | Export ledger as Markdown |
+| `acta delete` | Delete all ledger data for the current project (entries, sessions, costs) |
+| `acta delete --remove-project` | Also remove the project record and `.acta/project.json` |
 | `acta config` | View current configuration |
 
 ---
@@ -204,19 +211,20 @@ transport = "stdio"
 enabled = false
 provider = "openai"        # openai | anthropic | deepseek | ollama
 model = "gpt-4.1-mini"
-api_key_env = "ACTA_LLM_API_KEY"
+api_key = "sk-..."         # optional: store key directly here
+# api_key_env = "ACTA_LLM_API_KEY"  # optional: load key from env var instead
 
 [ui]
 enabled = false
 port = 7433
 ```
 
-### Environment variables
+### Environment variables (optional overrides)
 
 | Variable | Purpose |
 |---|---|
 | `ACTA_DB_PATH` | Database file location |
-| `ACTA_LLM_API_KEY` | API key for agent LLM calls |
+| `ACTA_LLM_API_KEY` | Overrides `[agent].api_key` when set |
 | `ACTA_LLM_PROVIDER` | `openai`, `anthropic`, `deepseek`, or `ollama` |
 | `ACTA_LLM_MODEL` | Model name |
 | `ACTA_LLM_BASE_URL` | Override API base URL (Ollama host, custom endpoints) |
@@ -243,11 +251,7 @@ Acta supports four LLM providers for agent mode:
 enabled = true
 provider = "openai"
 model = "gpt-4.1-mini"
-api_key_env = "ACTA_LLM_API_KEY"
-```
-
-```bash
-export ACTA_LLM_API_KEY="sk-..."
+api_key = "sk-..."
 ```
 
 ### Anthropic
@@ -257,7 +261,7 @@ export ACTA_LLM_API_KEY="sk-..."
 enabled = true
 provider = "anthropic"
 model = "claude-haiku-3-5-20241022"
-api_key_env = "ACTA_LLM_API_KEY"
+api_key = "sk-ant-..."
 ```
 
 ### DeepSeek (low-cost API)
@@ -267,7 +271,7 @@ api_key_env = "ACTA_LLM_API_KEY"
 enabled = true
 provider = "deepseek"
 model = "deepseek-chat"
-api_key_env = "ACTA_LLM_API_KEY"
+api_key = "sk-..."
 ```
 
 Get a key at [platform.deepseek.com](https://platform.deepseek.com).
@@ -292,6 +296,25 @@ No API key. Fully offline. Works air-gapped.
 
 The agent runs the flow: **Observe → Filter → Classify → Summarize → Persist**
 
+Every LLM call the agent makes is automatically tallied and written to the `costs` table (model name, tokens in, tokens out, session). Real token counts are read from LangChain's standard `usage_metadata`; for providers that don't emit usage, a `~4 chars/token` heuristic is used instead and the row is marked as estimated. You can opt out with `record_costs=False` when calling `process_observation` programmatically.
+
+---
+
+## Cost Tracking
+
+Acta records every token your coding session spends and shows the breakdown in the **Token Usage** tab of the web viewer.
+
+Two independent paths feed the `costs` table:
+
+1. **Your IDE agent** — the Cursor Rule (`.cursor/rules/acta.md`) tells the agent to call `acta_record_cost` at the end of each response. If the runtime exposes real input/output token counts, it forwards them verbatim; otherwise it estimates from text length (~4 chars/token).
+2. **The LangGraph pipeline** — when Acta's own agent runs (`process_observation`), it transparently wraps the configured LLM to capture per-call usage and writes one aggregate row per invocation. Works uniformly across OpenAI, Anthropic, DeepSeek, and Ollama — falling back to char-based estimation on providers that don't return usage metadata.
+
+Rows carry `project_id`, `session_id`, `tokens_in`, `tokens_out`, `model`, and `created_at`, and are surfaced in the UI as:
+
+- Total tokens for the selected timeframe
+- Per-model breakdown with call counts
+- Per-session rollup
+
 ---
 
 ## Web Viewer
@@ -305,8 +328,11 @@ acta serve --ui
 Open `http://127.0.0.1:7433` to see:
 - Timeline of all entries with session boundaries
 - Filter by entry type
-- Progress summary
+- Progress summary (use the **All time** timeframe to see every entry ever logged)
 - Open todos and blockers
+- **Token Usage** tab: total cost, per-model bars, per-session table
+
+> **Note:** The viewer defaults to **This week**. If entries logged earlier are missing, switch the timeframe to **All time** in the top-right dropdown.
 
 ---
 

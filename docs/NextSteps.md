@@ -18,16 +18,17 @@ Replaced single-page layout with a proper app shell:
 - Cost tab with overview stats, bar charts per model, per-session table
 - Token counts format as K/M for readability
 
-### Phase 3 — Cost Tracking Activation
+### ✅ Phase 3 — Cost Tracking Activation (DONE)
 
-Token data is stored and displayed correctly, but nothing calls `acta_record_cost` automatically yet.
+Token data now flows into the costs table from both paths: the IDE agent (via the Cursor Rule calling `acta_record_cost`) and the internal LangGraph pipeline (automatic).
 
-**What to do:**
+**What shipped:**
 
-- [ ] Update `.cursor/rules/acta.md` to instruct Cursor's agent to call `acta_record_cost` after each response with token counts and model name
-- [ ] Confirm the Cursor API exposes token counts to the agent context (may need to estimate from response length as a fallback)
-- [ ] When the LangGraph pipeline is invoked (Cursor stop hook, future `acta agent …` CLI, etc.), record that pipeline's own LLM usage into the costs table as well (today the graph does not call `record_cost` — wire it when that path ships)
-- [ ] Test that costs populate in the Token Usage tab after a few interactions
+- `.cursor/rules/acta.md` now instructs the agent to call `acta_record_cost` at the end of every response with model name and token counts. When the runtime does not expose real usage, the rule specifies a ~4 chars/token estimation fallback so costs still populate.
+- New `acta.core.cost` module with `TokenUsage`, `estimate_tokens`, `extract_usage`, and `resolve_model_name` helpers. `extract_usage` reads LangChain's standard `usage_metadata` first and falls back through legacy OpenAI/Anthropic shapes before finally estimating from character length.
+- `process_observation` now wraps the LLM in a transparent `_UsageTrackingLLM` that records each invoke's token usage. After the graph completes, totals are written as a single `costs` row (model name auto-resolved, session_id propagated). A `record_costs=False` flag is available for tests/headless use.
+- 17 new tests in `tests/test_cost_tracking.py` covering token extraction across all provider shapes, estimation fallbacks, and graph integration (metered, unmetered, and disabled).
+- Costs recorded by the pipeline show up in the Token Usage tab automatically because the UI reads from the same `costs` table (no UI changes required).
 
 ### Phase 4 — PR Description Generator (UI)
 
@@ -65,7 +66,7 @@ Ask questions about your development history, grounded strictly in Acta entries.
 
 Things to close out before calling V1 done:
 
-- [ ] **Fix Cursor Rule** — add one line to `.cursor/rules/acta.md` instructing the agent to self-report its model name on every `acta_append_entry` call
+- [x] **Fix Cursor Rule** — `.cursor/rules/acta.md` now tells the agent to self-report its model name on every `acta_append_entry` and `acta_record_cost` call (covered as part of Phase 3)
 - [ ] **Publish to PyPI** — run `hatch build && hatch publish` so `pip install acta-ledger` works globally for anyone
 - [ ] **VS Code + Copilot integration** — already designed, needs end-to-end testing and docs added to README
 - [ ] **SSE transport** — currently only stdio works; SSE enables non-local tools (Claude.ai web, remote servers) to connect via HTTP
